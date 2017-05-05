@@ -18,7 +18,7 @@ let s:oVersoes.segundaVersao   = ''
 let s:oVersoes.segundaSelecao  = ''
 
 " Caminho absoluto para arquivo atual
-let s:path = resolve(expand('<sfile>:p')) . 'cvsdiff'
+let s:path = resolve(expand('<sfile>:p:h')) . '/cvsdiff'
 
 let s:sNome = "CVS\ DIFF\ "
 "
@@ -154,7 +154,7 @@ function! s:Bootstrap()
   let s:sFileEncoding  = &fileencoding
   let s:sFileEncodings = &fileencodings
 
-  call Executar(s:path . s:sArquivo)
+  call Executar(s:path . ' ' s:sArquivo)
 
 endfunction
 
