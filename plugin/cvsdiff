@@ -1,0 +1,392 @@
+#!/usr/bin/php -q 
+<?php
+
+/**
+ * Parse nos parametros e chama funcao CvsLog::log
+ */
+CvsLog::bootstrap();
+
+/**
+ * cvs log
+ *
+ * @require phpcli
+ * @require cvs client
+ * @version 0.1
+ */
+class CvsLog {
+
+  public function output($sMensagem) {
+    echo Encode::toISO($sMensagem);
+  }
+
+  /**
+   * Inicia programa
+   *
+   * @static
+   * @access public
+   * @return void
+   */
+  public static function bootstrap() {
+
+    global $argv;
+
+    /**
+     * remove primeiro indice com nome do arquivo atual 
+     */
+    array_shift($argv);
+
+    /**
+     * argumentos passados para o script
+     */
+    $aArgumentos = $argv;
+
+    CvsLog::log($aArgumentos);
+  }
+
+  /**
+   * log
+   *
+   * @static
+   * @access public
+   * @return void
+   */
+  public static function log($aParametros) {
+
+    if ( empty($aParametros) ) {
+
+      self::output("Nenhum parametro informado\n");
+      exit(1);
+    }
+
+    foreach ($aParametros as $iIndice => $sParametro) {
+
+      if ( file_exists($sParametro) ) {
+
+        $sArquivo = $sParametro;
+        break;
+      }
+    }
+
+    if ( empty($sArquivo) ) {
+
+      self::output("arquivo nao econtrado\n");
+      exit(1);
+    } 
+
+    $sArquivo = str_replace(getcwd() . '/', '', $sArquivo);
+
+    /**
+     * Lista somenta as tags
+     */
+    exec('cvs log -h ' . $sArquivo, $aRetornoComandoTags, $iStatusComandoTags);
+
+    if ( $iStatusComandoTags > 1 ) {
+
+      self::output("Erro ao execurar cvs log -h $sArquivo\n");
+      exit(1);
+    }
+
+    $aTagsPorVersao = array();
+    $iVersaoAtual = 0;
+    $lInicioListaTags = false;
+
+    foreach( $aRetornoComandoTags as $iIndiceTags => $sLinhaRetornoTag ) {
+
+      if ( strpos($sLinhaRetornoTag, 'head:') !== false ) {
+
+        $iVersaoAtual = trim(str_replace('head:', '', $sLinhaRetornoTag));
+        continue;
+      }
+
+      if ( strpos($sLinhaRetornoTag, 'symbolic names:') !== false ) {
+
+        $lInicioListaTags = true;
+        continue;
+      }
+
+      if ( $lInicioListaTags ) {
+
+        if ( strpos($sLinhaRetornoTag, 'keyword substitution') !== false ) {
+          break;
+        }
+
+        if ( strpos($sLinhaRetornoTag, 'total revisions') !== false ) {
+          break;
+        }
+
+        $aLinhaTag = explode(':', $sLinhaRetornoTag);
+        $iVersao   = trim($aLinhaTag[1]);
+        $sTag      = trim($aLinhaTag[0]);
+
+        $aTagsPorVersao[$iVersao][] = $sTag;
+      }
+    }
+
+    /**
+     * Lista informacoes do commit, sem as tags
+     */
+    exec('cvs log -N ' . $sArquivo, $aRetornoComandoInformacoes, $iStatusComandoInformacoes);
+
+    if ( $iStatusComandoInformacoes > 1 ) {
+
+      self::output('Erro ao execurar cvs log -N ' . $sArquivo . "\n");
+      exit(1);
+    }
+
+    $aLog = array();
+    $iLinhaInformacaoCommit = 0;
+
+    $oTabela = new Table();
+    $oTabela->setHeaders(array('1', '2', '3', '4', '5'));
+    $aLinhas = array();
+
+    $iVersao   = null;
+    $sAutor    = null;
+    $sData     = null;
+    $sMensagem = null;
+
+    foreach ( $aRetornoComandoInformacoes as $iIndice => $sLinhaRetorno ) {
+
+      if ( strpos($sLinhaRetorno, '------') !== false ) {
+        continue;
+      } 
+
+      if ( $iLinhaInformacaoCommit == 0 && $iIndice > 11 ) {
+
+        $sTagsPorVersao = null;
+
+        if ( !empty($aTagsPorVersao[$iVersao]) ) {
+          $sTagsPorVersao = implode(', ', $aTagsPorVersao[$iVersao]);
+        }
+
+        $oTabela->addRow(array($iVersao, $sTagsPorVersao, $sAutor, $sData, Encode::toISO($sMensagem)));
+        $iVersao   = '';
+        $sAutor    = '';
+        $sData     = '';
+        $sMensagem = '';
+      }
+
+      if ( $iLinhaInformacaoCommit > 0 ) {
+        $iLinhaInformacaoCommit--;
+      } 
+
+      /**
+       * Versao
+       */
+      if ( strpos($sLinhaRetorno, 'revision') !== false && strpos($sLinhaRetorno, 'revision') === 0 ) {
+        $iLinhaInformacaoCommit = 2;
+      } 
+      
+      /**
+       * Versao
+       */
+      if ( $iLinhaInformacaoCommit == 2 ) {
+
+        $iVersao = trim(str_replace('revision', '', $sLinhaRetorno));
+        continue;
+      }
+
+      /**
+       * Data e autor 
+       */
+      if ( $iLinhaInformacaoCommit == 1 ) {
+        
+        $sLinhaRetorno = strtr($sLinhaRetorno, array('date:' => '', 'author:' => ''));
+        $aLinhaInformacoesCommit = explode(';', $sLinhaRetorno);
+        $sLinhaData = array_shift($aLinhaInformacoesCommit);
+        $aLinhaData = explode(' ', $sLinhaData);
+        $sData .= implode('/', array_reverse(explode('-', $aLinhaData[1])));
+
+        $sAutor = trim(array_shift($aLinhaInformacoesCommit));
+        continue;
+      } 
+
+      /**
+       * Mensagem 
+       */
+      if ( $iLinhaInformacaoCommit == 0 ) {
+        $sMensagem = $sLinhaRetorno;
+      }
+    }
+
+    $sLog = trim($oTabela->render( $mostra_com_espacos = true )) . "\n";
+
+    file_put_contents('/tmp/cvslogvim', $sLog);
+  }
+
+}
+
+class Table {
+
+	protected $aHeaders = array();
+	protected $aWidth   = array();
+	protected $aRows    = array();
+
+	public function __construct(array $headers = null, array $rows = null) {
+
+		if ( !empty($headers) ) {
+			$this->setHeaders($headers);
+		}
+
+    if ( !empty($rows) ) {
+			  $this->setRows($rows);
+    }
+	}
+
+	protected function checkRow(array $row) {
+
+		foreach ($row as $column => $str) {
+
+			$width = Shell::strlen($str);
+
+			if (!isset($this->aWidth[$column]) || $width > $this->aWidth[$column]) {
+				$this->aWidth[$column] = $width;
+			}
+		}
+
+		return $row;
+	}
+
+	public function render( $lEspacos = false ) {
+		
+		$borderStr = '';
+    $sTabela = '';
+
+    if ( !$lEspacos ) {
+
+      foreach ($this->aHeaders as $column => $header) {
+      
+        if ( $column > 0 ) {
+          $borderStr .= '+';
+        }
+      
+      	$borderStr .= '-' . str_repeat('-', $this->aWidth[$column]) . '-';
+      }
+
+      $sTabela  = "\n" . $this->renderRow($this->aHeaders);
+      $sTabela .= "\n" . $borderStr;
+    }
+
+		foreach ($this->aRows as $row) {
+			$sTabela .= "\n" . $this->renderRow($row, $lEspacos);
+		}
+
+    max($this->aWidth);
+    return $sTabela . "\n";
+	}
+
+	protected function renderRow(array $row, $lEspacos = false) {
+
+		$render = '';
+
+		foreach ($row as $column => $val) {
+
+      $render .= '';
+
+      if ( $column > 0 && !$lEspacos ) {
+		    $render .= '|';
+      }
+
+      if ( !$lEspacos) {
+			  $render .= ' ';
+      } 
+
+			$render .= Shell::str_pad($val, $this->aWidth[$column]) . ' ';
+		}
+
+		return $render;
+	}
+
+	public function sort($column) {
+
+		if (!isset($this->aHeaders[$column])) {
+
+			trigger_error('Coluna invalida no index ' . $column, E_USER_NOTICE);
+			return;
+		}
+
+		usort($this->aRows, function($a, $b) use ($column) {
+			return strcmp($a[$column], $b[$column]);
+		});
+	}
+
+	public function setHeaders(array $headers) {
+		$this->aHeaders = $this->checkRow($headers);
+	}
+
+	public function addRow(array $row) {
+		$this->aRows[] = $this->checkRow($row);
+	}
+
+	public function setRows(array $rows) {
+
+		$this->aRows = array();
+
+		foreach ($rows as $row) {
+			$this->addRow($row);
+		}
+	}
+
+	public function getRows() {
+		return $this->aRows;
+	}
+
+  public function getWidths() {
+    return $this->aWidth;
+  }
+
+}
+
+class Shell {
+
+  /**
+   * Retorna o o tamanho da string sem contar as cores
+   *
+   * @param string $sText
+   * @static
+   * @access public
+   * @return integer
+   */
+  static public function strlen($sValue) {
+    return mb_strlen(Encode::toISO($sValue));
+  }
+
+  /**
+   * Retorna string para strings que contem cor 
+   *
+   * @param string $sString
+   * @param integer $iLength
+   * @static
+   * @access public
+   * @return string
+   */
+	static public function str_pad($sString, $iLength) {
+
+		$iRealLength = mb_strlen($sString);
+		$iShowLength = self::strlen($sString);
+		$iLength    += $iRealLength - $iShowLength;
+
+		return str_pad($sString, $iLength);
+	}
+
+}
+
+class Encode {
+
+  static public function ISOToUTF8($sText) {
+    return mb_convert_encoding($sText, 'UTF-8', 'ISO-8859-1'); 
+  }
+
+  static public function UTF8ToISO($sText) {
+    return mb_convert_encoding($sText, 'ISO-8859-1', 'UTF-8'); 
+  }
+
+  static public function toUTF8($sText) {
+    return mb_convert_encoding($sText, "UTF-8", mb_detect_encoding($sText, "UTF-8, ISO-8859-1, ISO-8859-15", true));
+  }
+
+  static public function toISO($sText) {
+    return mb_convert_encoding($sText, "ISO-8859-1", mb_detect_encoding($sText, "UTF-8, ISO-8859-1, ISO-8859-15", true)); 
+  }
+
+}
