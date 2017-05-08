@@ -143,7 +143,7 @@ endfunction
 function! s:Bootstrap()
 
   if !filereadable('CVS/Repository')
-    throw 'Diret¿rio atual n¿o ¿ um repositorio CVS'
+    throw 'Diretório atual não é um plugin'
   endif
 
   let s:sProjeto  = split(Executar('cat CVS/Repository'))[0] . '/'
@@ -154,7 +154,7 @@ function! s:Bootstrap()
   let s:sFileEncoding  = &fileencoding
   let s:sFileEncodings = &fileencodings
 
-  call Executar(s:path . ' ' s:sArquivo)
+  call Executar(s:path . ' ' . s:sArquivo)
 
 endfunction
 
@@ -226,7 +226,7 @@ function! Processar()
     if empty(s:oVersoes.primeiraVersao) && !empty(l:nVersaoCursor)
 
       call Executar(l:sComandoCheckout . '-r ' . l:nVersaoCursor . ' '.  s:sProjeto . s:sArquivo)
-      call Executar(sComandoMover . '[' . l:nVersaoCursor . ']\ ' . l:sArquivo)
+      call Executar(sComandoMover . '\[' . l:nVersaoCursor . '\]\ ' . l:sArquivo)
 
       exe 'tabnew ' . l:sPathArquivos . '[' . l:nVersaoCursor . '] ' . l:sArquivo
       call s:ChangeFileName('[' . l:nVersaoCursor . '] ' . l:sArquivo)
@@ -245,10 +245,10 @@ function! Processar()
         throw 'Erro - ' . l:sOutputCheckout
       endif
 
-      call Executar(sComandoMover . '[' . s:oVersoes.primeiraVersao . ']\ ' . l:sArquivo)
+      call Executar(sComandoMover . '\[' . s:oVersoes.primeiraVersao . '\]\ ' . l:sArquivo)
 
       exe 'tabnew ' . s:sArquivo
-      exe l:sComandoDiff . '[' . s:oVersoes.primeiraVersao . '] ' . l:sArquivo
+      exe l:sComandoDiff . '[' . s:oVersoes.primeiraVersao . ']\ ' . l:sArquivo
       call s:ChangeFileName('[' . s:oVersoes.primeiraVersao . '] ' . l:sArquivo)
       exe 'setlocal filetype=' . s:sFileType
 
@@ -262,7 +262,7 @@ function! Processar()
         throw 'Erro - ' . l:sOutputCheckoutPrimeiraVersao
       endif
 
-      call Executar(sComandoMover . '[' . s:oVersoes.primeiraVersao . ']\ ' . l:sArquivo)
+      call Executar(sComandoMover . '\[' . s:oVersoes.primeiraVersao . '\]\ ' . l:sArquivo)
 
       let l:sOutputCheckoutSegundaVersao = Executar(l:sComandoCheckout . '-r ' . s:oVersoes.segundaVersao . ' '.  s:sProjeto . s:sArquivo)
 
@@ -270,7 +270,7 @@ function! Processar()
         throw 'Erro - ' . l:sOutputCheckoutSegundaVersao
       endif
 
-      call Executar(sComandoMover . '[' . s:oVersoes.segundaVersao . ']\ ' . l:sArquivo)
+      call Executar(sComandoMover . '\[' . s:oVersoes.segundaVersao . '\]\ ' . l:sArquivo)
 
       exe 'tabnew ' . l:sPathArquivos . '[' . s:oVersoes.primeiraVersao . '] ' . l:sArquivo
       call s:ChangeFileName('[' . s:oVersoes.primeiraVersao . '] ' . l:sArquivo)
